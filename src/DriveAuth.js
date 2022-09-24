@@ -4,6 +4,7 @@ const path             = require('path');
 const process          = require('process');
 const { authenticate } = require('@google-cloud/local-auth');
 const { google }       = require('googleapis');
+const editJsonFile     = require('edit-json-file');
 
 class Drive {
   constructor() {
@@ -12,11 +13,70 @@ class Drive {
     // The file token.json stores the user's access and refresh tokens, and is
     // created automatically when the authorization flow completes for the first
     // time.
-    this.TOKEN_PATH = path.join(process.cwd(), 'token.json');
-    this.CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
+    this.TOKEN_PATH       = path.join(process.cwd(), 'gdrive_token.json');
+    this.CREDENTIALS_PATH = path.join(process.cwd(), 'gdrive_credentials.json');
 
-    this.currentPath = ['root'];
+    this.lockfileName = '_lock.json';
+    this.username     = 'default';
+    this.settings     = {};
+
+    this.currentPath  = ['root'];
   }
+
+  lock() {}
+  unlock() {}
+
+  get lockfile() {
+    // download new lock file first
+
+    // and then open it here
+    return editJsonFile(`${process.cwd()}/${this.lockfileName}`, {autosave: true});
+  }
+
+// ::just a promise example::
+//  async callApi(receiver, apiCall, data={}) {
+//    let promise = await new Promise(function(resolve, reject) {
+//      this.ipc.of[this.serverName].on(
+//        `${receiver}.${apiCall}.return.${this.nodeName}.${returnCode}`,
+//        resolve,
+//        true // setting this true will remove this listener once used
+//      );
+//    }.bind(this));
+//
+//    return promise;
+//  }
+
+  async listFolders() {
+    return this._call(async function(drive) {
+      const currentFolder = this.currentFolder;
+
+      let search = `\'${currentFolder}\' in parents and trashed=False`;
+      search += ' and mimeType=\'application/vnd.google-apps.folder\''
+
+      const res = await drive.files.list({
+        // fields: '*', // use for adding fields
+        // parents: ['1yG01ZqucJ8oFKhT7ecZRko1BhNp2NE6H'],
+        fields: 'files(id, name, mimeType, parents, webContentLink, webViewLink)',
+        orderBy: 'name',
+        q: search,
+        //result = Drive.service.files()._list(q=f'"{search}" in parents and trashed=False').execute().get("files", [])
+      });
+
+      return res.data.files;
+    }.bind(this));
+  }
+
+  async _call(callback) {
+    let promise = await new Promise(function(resolve, reject) {
+      this._authorize().then(async function(authClient) {
+        const drive = google.drive({version: 'v3', auth: authClient});
+        resolve(callback(drive));
+      });
+    }.bind(this));
+    return promise;
+  }
+
+////////////////////////////////////////////////////////////////////////////////
 
   get currentFolder() {
     return this.currentPath[this.currentPath.length-1];
@@ -123,7 +183,7 @@ class Drive {
 
   listFiles(callback) { this._list('files', callback); }
 
-  listFolders(callback) { this._list('folders', callback); }
+  // listFolders(callback) { this._list('folders', callback); }
 
   listAll(callback) { this._list('all', callback); }
 
@@ -149,7 +209,7 @@ class Drive {
         q: search,
 //result = Drive.service.files()._list(q=f'"{search}" in parents and trashed=False').execute().get("files", [])
       });
-      callback(res);
+      callback(res.data.files);
 //      const files = res.data.files;
 //      if (files.length === 0) {
 //        console.log('No files found.');
