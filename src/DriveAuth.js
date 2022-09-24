@@ -15,10 +15,27 @@ class Drive {
     this.TOKEN_PATH = path.join(process.cwd(), 'token.json');
     this.CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
 
-    this.currentFolder = 'root';
+    this.currentPath = ['root'];
   }
 
-  goto(filepath, callback) {
+  get currentFolder() {
+    return this.currentPath[this.currentPath.length-1];
+  }
+
+  /**
+  * @param {string} newFolder
+  *   This should be the id of the folder you wish to navigate into. If set as
+  *   'root', it will go back to the root directory and erase all other
+  *   folders in the list
+  */
+  goto(newFolder) {
+    if (newFolder == 'root') {
+      this.currentPath = ['root'];
+      return;
+    }
+
+    this.currentPath.push(newFolder);
+
     // split filepath
     // if first part is a period then reference current directory
     // else start from root and navigate to specific directory
@@ -124,7 +141,7 @@ class Drive {
       }
       // else show all files and folders
 
-      const res = await drive.files._list({
+      const res = await drive.files.list({
         // fields: '*', // use for adding fields
         // parents: ['1yG01ZqucJ8oFKhT7ecZRko1BhNp2NE6H'],
         fields: 'files(id, name, mimeType, parents, webContentLink, webViewLink)',
