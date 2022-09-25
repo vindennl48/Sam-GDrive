@@ -8,18 +8,40 @@ let serverName = 'samcore';
 let node       = new Client(nodeName, serverName);
 let drive      = new Drive();
 
-node.addApiCall('onError', function(packet) {
-  Helpers.log(
-    {leader: 'error', loud: false},
-    'Error: ', packet.errorMessage,
-    ', Packet: ', packet
-  );
-});
+node
+  .addApiCall('onError', function(packet) {
+    Helpers.log(
+      {leader: 'error', loud: false},
+      'Error: ', packet.errorMessage,
+      ', Packet: ', packet
+    );
+  })
 
-let main = async function() {
-  node.run({onInit: onInit, onConnect: onConnect});
-}
-main();
+  .addApiCall('newsongs', async function(packet) {
+    packet.bdata = packet.data;
+    packet.data  = await drive.newSongs(packet.data);
+    this.return(packet);
+  })
+
+  .addApiCall('upload', async function(packet) {
+    let result = await drive.bulkUpload(packet.data);
+
+    if ('errorMessage' in result) {
+      this.returnError(packet, result.errorMessage);
+      return;
+    }
+
+    packet.bdata = packet.data;
+    packet.data  = result;
+    this.return(packet);
+  })
+
+  .run({
+    onInit:    onInit,
+    onConnect: onConnect}
+  );
+
+
 
 async function onInit() {
   let packet     = await this.callApi(serverName, 'getUsername');
@@ -29,12 +51,31 @@ async function onInit() {
   drive.settings = packet.data;
 }
 
-const editJsonFile = require('edit-json-file');
-
 async function onConnect() {
-  // await drive.updateFile('./_lock.json', drive.settings.lock);
-  let res = await drive.lock();
-  Helpers.log({leader: 'arrow', loud: false}, 'result: ', res);
+  let uploadPacket = [
+    {
+      parent:   drive.settings.songs,
+      type:     'mixes',
+      filepath: '/Users/mitch/Documents/LOFSongManager/extracted_songs/practice/Media/DrumMix(171).wav',
+      name:     'DrumMix171.wav',
+    },
+    {
+      parent:   drive.settings.songs,
+      type:     'mixes',
+      filepath: '/Users/mitch/Documents/LOFSongManager/extracted_songs/practice/Media/DrumMix(172).wav',
+      name:     'DrumMix172.wav',
+    },
+    {
+      parent:   drive.settings.songs,
+      type:     'mixes',
+      filepath: '/Users/mitch/Documents/LOFSongManager/extracted_songs/practice/Media/DrumMix(173).wav',
+      name:     'DrumMix173.wav',
+    }
+  ];
+
+  let packet = await this.callApi(nodeName, 'upload', uploadPacket);
+
+  Helpers.log({leader: 'arrow', loud: false}, 'result: ', packet.data);
 }
 
 
