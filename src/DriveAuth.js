@@ -36,6 +36,71 @@ class Drive {
   }
 
   /**
+    * Used for mass downloading of files.  Instruction should look like:
+    *
+    * @param {array} instructions
+    *   List of instructions to download.
+    *   instruction example:
+    *     {
+    *       name:     'TravelSizedRanch.mp3',      // include the extension
+    *       filepath: './TravelSizedRanch.mp3',
+    *       id:       '2039fh48fbi2kb4khsdifiwbef'
+    *     }
+    *
+    * @return {object} either { result: true } or { errorMessage: 'message' }
+    */
+  async bulkDownload(instructions) {
+    for (let i = 0; i < instructions.length; i++) {
+      const instruction = instructions[i];
+
+      if (
+        !('name'     in instruction) ||
+        !('filepath' in instruction) ||
+        !('id'       in instruction)
+      ) {
+        return {
+          errorMessage: `Missing variable in instruction #${i}`
+        };
+      }
+
+      Helpers.log({leader: 'arrow', loud: false},
+        `Downloading '${instruction.name}'..`
+      );
+
+      let res = await this._downloadFile(
+        instruction.filepath,
+        instruction.id,
+        {
+          'data': async function(percent) {
+            Helpers.log({leader: 'sub', loud: false},
+              `'${instruction.name}' downloaded: `, percent
+            );
+          },
+          'end': async function() {
+            Helpers.log({leader: 'sub', loud: false},
+              `'${instruction.name}' Download Complete!`
+            );
+          },
+          'error': async function(err) {
+            Helpers.log({leader: 'error', loud: false},
+              `'${instruction.name}' Download Error: `, err
+            );
+          }
+        }
+      );
+      if (!res) {
+        return {
+          errorMessage: `Issue downloading instruction #${i}`
+        };
+      }
+    }
+
+    Helpers.log({leader: 'highlight', loud: false}, 'Downloads Complete!');
+
+    return { result: true };
+  }
+
+  /**
     * Used for mass uploading of files.
     * TODO: There should be a way to make this all asyncronous to upload all
     *       files at the same time..  Just need a way to have them all come
@@ -44,11 +109,18 @@ class Drive {
     * @param {array} instructions
     *   List of instructions for what files to upload and to where.
     *   instruction example:
-    *     {
-    *       parent: '2039fh48fbi2kb4khsdifiwbef',
-    *       type: 'mixes',  // mixes, projects, stems
+  *     {
+    *       parent:   '2039fh48fbi2kb4khsdifiwbef',
+    *       type:     'mixes', // mixes, projects, stems
     *       filepath: './TravelSizedRanch.mp3',
-    *       name: 'TravelSizedRanch.mp3', // include the extension
+    *       name:     'TravelSizedRanch.mp3', // include the extension
+    *     }
+    *   For updating remotedb.json
+    *     {
+    *       type:     'db',
+    *       filepath: './remotedb.json',
+    *       name:     'remotedb.json',              // include the extension
+    *       id:       '2039fh48fbi2kb4khsdifiwbef', // id of remotedb on cloud
     *     }
     *
     */
@@ -57,11 +129,20 @@ class Drive {
 
     for (let i = 0; i < instructions.length; i++) {
       const instruction = instructions[i];
+      let isMissingVar  = false;
 
-      if ( !('parent' in instruction) ||
-          !('type' in instruction) ||
-          !('filepath' in instruction) ||
-          !('name' in instruction) ) {
+      if (
+        !('type'     in instruction) ||
+        !('filepath' in instruction) ||
+        !('name'     in instruction)
+      ) { isMissingVar = true; }
+
+      if (
+        (  instruction.type == 'db'  && !('id'     in instruction)) ||
+        (!(instruction.type == 'db') && !('parent' in instruction))
+      ) { isMissingVar = true; }
+
+      if (isMissingVar) {
         return {
           errorMessage: `Missing variable in instruction #${i}`
         };
@@ -71,6 +152,7 @@ class Drive {
       if      (instruction.type == 'mixes')    { type = this.fileType.mp3; }
       else if (instruction.type == 'projects') { type = this.fileType.zip; }
       else if (instruction.type == 'stems')    { type = this.fileType.zip; }
+      else if (instruction.type == 'db')       { type = this.fileType.json; }
       else {
         return {
           errorMessage: `Invalid type in instruction #${i}`
@@ -80,29 +162,37 @@ class Drive {
       Helpers.log({leader: 'arrow', loud: false},
         `Uploading '${instruction.name}'..`
       );
-      result[instruction.name] = await this._uploadFile(
-        instruction.parent,
-        type,
-        instruction.filepath,
-        instruction.name,
-        {
-          'data': async function(percent) {
-            Helpers.log({leader: 'sub', loud: false},
-              `'${instruction.name}' uploaded: `, percent
-            );
-          },
-          'end': async function() {
-            Helpers.log({leader: 'sub', loud: false},
-              `'${instruction.name}' Upload Complete!`
-            );
-          },
-          'error': async function(err) {
-            Helpers.log({leader: 'error', loud: false},
-              `'${instruction.name}' Upload Error: `, err
-            );
+
+      if (instruction.type == 'db') {
+        result[instruction.name] = await this._updateFile(
+          instruction.filepath,
+          instruction.id
+        );
+      } else {
+        result[instruction.name] = await this._uploadFile(
+          instruction.parent,
+          type,
+          instruction.filepath,
+          instruction.name,
+          {
+            'data': async function(percent) {
+              Helpers.log({leader: 'sub', loud: false},
+                `'${instruction.name}' uploaded: `, percent
+              );
+            },
+            'end': async function() {
+              Helpers.log({leader: 'sub', loud: false},
+                `'${instruction.name}' Upload Complete!`
+              );
+            },
+            'error': async function(err) {
+              Helpers.log({leader: 'error', loud: false},
+                `'${instruction.name}' Upload Error: `, err
+              );
+            }
           }
-        }
-      );
+        );
+      }
     }
 
     Helpers.log({leader: 'highlight', loud: false}, 'Uploads Complete!');
@@ -159,7 +249,7 @@ class Drive {
     * @return {bool}
     *   Returns a boolean if we successfully locked the drive
     */
-  async _lock() {
+  async lock() {
     let canLock  = false;
     this.ramLock = await this._getLockfile();
 
@@ -186,9 +276,6 @@ class Drive {
       }
     }
 
-    // remove lock in ram
-    this.ramLock = null;
-
     return false;
   }
 
@@ -198,7 +285,7 @@ class Drive {
     * @return {bool}
     *   Returns a boolean if we successfully unlocked the drive
     */
-  async _unlock() {
+  async unlock() {
     let canUnlock = false;
     this.ramLock  = await this._getLockfile();
 
@@ -234,16 +321,16 @@ class Drive {
     */
   async _getLockfile() {
     // download new lock file first
-    if (this.ramLock == null) {
-      await this._downloadFile(this.remoteLockfile, this.settings.lock);
-    }
+    // if (this.ramLock == null) {
+    await this._downloadFile(this.remoteLockfile, this.settings.lock);
+    // }
 
     return JSON.parse(await fs.readFile(this.remoteLockfile));
   }
 
   /**
     * Used for uploading a new lock file.  This should only be used inside the
-    * 'this._lock()' function to be checked for authenticity first.
+    * 'this.lock()' function to be checked for authenticity first.
     *
     * @return {bool}
     *   Returns a boolean if we uploaded the new lock successfully
