@@ -34,8 +34,7 @@ node
     */
   .addApiCall('newSongs', async function(packet) {
     if (await drive.lock()) {
-      packet.bdata = packet.data;
-      packet.data  = await drive.newSongs(packet.data);
+      packet.data = { result: await drive.newSongs(packet.data) }
 
       if (await drive.unlock()) {
         this.return(packet);
@@ -82,8 +81,7 @@ node
         return;
       }
 
-      packet.bdata = packet.data;
-      packet.data  = result;
+      packet.data = { result: result };
 
       if (await drive.unlock()) {
         this.return(packet);
@@ -120,8 +118,7 @@ node
       return;
     }
 
-    packet.bdata = packet.data;
-    packet.data  = result;
+    packet.data = { result: result };
 
     this.return(packet);
   })
@@ -146,4 +143,6 @@ async function onInit() {
 /**
   * Any code that needs to run when the node starts
   */
-async function onConnect() {}
+async function onConnect() {
+  Helpers.log({leader: 'arrow', loud: true}, 'Running!');
+}
