@@ -6,10 +6,10 @@
   */
 
 
-// const fs          = require('fs').promises;
 const { Drive }   = require('./DriveAuth.js');
 const { Client }  = require('../../samcore/src/Client.js');
 const { Helpers } = require('../../samcore/src/Helpers.js');
+const Packet      = Helpers.Packet;
 
 let nodeName   = 'gdrive';
 let serverName = 'samcore';
@@ -21,7 +21,9 @@ node
     * Used for making directory structure for new songs.  Should be done in
     * batch form.
     *
-    * packet.data should be an array of song names to add directories for.
+    * packet.args {
+    *   names: ['name 1', 'name 2', ...]
+    * }
     *
     * The return will be:
     *   {
@@ -33,8 +35,12 @@ node
     *   }
     */
   .addApiCall('newSongs', async function(packet) {
+    // Check if proper arguments are in the packet
+    if (!Packet.checkArgs(this, ['names'], packet)) return;
+
     if (await drive.lock()) {
-      packet.data = { result: await drive.newSongs(packet.data) }
+      packet = Packet.mergeMini(packet, await drive.newSongs(packet.args.names));
+      // packet.data = { result: await drive.newSongs(packet.data) }
 
       if (await drive.unlock()) {
         this.return(packet);
@@ -55,33 +61,39 @@ node
     * Used for bulk uploading of files. Can be used for mixes, stems, projects,
     * and the remotedb.json file.
     *
-    * To upload, format must be in:
-    *   {
-    *     parent:   '2039fh48fbi2kb4khsdifiwbef',
-    *     type:     'mixes',                      // mixes, projects, stems
-    *     filepath: './TravelSizedRanch.mp3',
-    *     name:     'TravelSizedRanch.mp3',       // include the extension
-    *   }
-    * For updating remotedb.json
-    *   {
-    *     type:     'db',
-    *     filepath: './remotedb.json',
-    *     name:     'remotedb.json',              // include the extension
-    *     id:       '2039fh48fbi2kb4khsdifiwbef', // id of remotedb on cloud
-    *   }
+    * packet.args {
+    *   files: [
+    *     { // To upload, format must be in:
+    *       parent:   '2039fh48fbi2kb4khsdifiwbef',
+    *       type:     'mixes',                      // mixes, projects, stems
+    *       filepath: './TravelSizedRanch.mp3',
+    *       name:     'TravelSizedRanch.mp3',       // include the extension
+    *     },
+    *     { // For updating remotedb.json
+    *       type:     'db',
+    *       filepath: './remotedb.json',
+    *       name:     'remotedb.json',              // include the extension
+    *       id:       '2039fh48fbi2kb4khsdifiwbef', // id of remotedb on cloud
+    *     }
+    *   ]
+    * }
     *
-    * Returns either an object of new file id's or { errorMessage: 'message' }
+    * Returns an object of new file id's
     */
   .addApiCall('upload', async function(packet) {
+    // Check if proper arguments are in the packet
+    if (!Packet.checkArgs(this, ['files'], packet)) return;
+
     if (await drive.lock()) {
-      let result = await drive.bulkUpload(packet.data);
+      packet = Packet.mergeMini(packet, await drive.bulkUpload(packet.args.files));
+      // let result = await drive.bulkUpload(packet.args.files);
 
-      if ('errorMessage' in result) {
-        this.returnError(packet, result.errorMessage);
-        return;
-      }
+      // if ('errorMessage' in result) {
+      //   this.returnError(packet, result.errorMessage);
+      //   return;
+      // }
 
-      packet.data = { result: result };
+      // packet.data = { result: result };
 
       if (await drive.unlock()) {
         this.return(packet);
@@ -101,24 +113,31 @@ node
   /**
     * Used for downloading multiple files at a time.
     *
-    * instruction example:
-    *   {
-    *     name:     'TravelSizedRanch.mp3',      // include the extension
-    *     filepath: './TravelSizedRanch.mp3',
-    *     id:       '2039fh48fbi2kb4khsdifiwbef'
-    *   }
+    * packet.args = {
+    *   files: [
+    *     {
+    *       name:     'TravelSizedRanch.mp3',      // include the extension
+    *       filepath: './TravelSizedRanch.mp3',
+    *       id:       '2039fh48fbi2kb4khsdifiwbef'
+    *     }
+    *   ]
+    * }
     *
-    * Returns either { result: true } or { errorMessage: 'message' }
+    * Returns either status true or an error message
     */
   .addApiCall('download', async function(packet) {
-    let result = await drive.bulkDownload(packet.data);
+    // Check if proper arguments are in the packet
+    if (!Packet.checkArgs(this, ['files'], packet)) return;
 
-    if ('errorMessage' in result) {
-      this.returnError(packet, result.errorMessage);
-      return;
-    }
+    packet = Packet.mergeMini(packet, await drive.bulkDownload(packet.args.files));
+    // let result = await drive.bulkDownload(packet.args.files);
 
-    packet.data = { result: result };
+    // if ('errorMessage' in result) {
+    //   this.returnError(packet, result.errorMessage);
+    //   return;
+    // }
+
+    // packet.data = { result: result };
 
     this.return(packet);
   })
@@ -133,11 +152,27 @@ node
   * and settings
   */
 async function onInit() {
-  let packet     = await this.callApi(serverName, 'getUsername');
-  drive.username = packet.data;
+  // load username from samcore
+  let packet = await this.callApi(serverName, 'getUsername');
+  if (packet.status) {
+    drive.username = packet.result;
+  } else {
+    Helpers.log({leader: 'error', loud: false},
+      'Error: ',
+      packet.errorMessage
+    );
+  }
 
-  packet         = await this.callApi(serverName, 'getSettings');
-  drive.settings = packet.data;
+  // Load settings from samcore
+  packet = await this.callApi(serverName, 'getSettings');
+  if (packet.status) {
+    drive.settings = packet.result;
+  } else {
+    Helpers.log({leader: 'error', loud: false},
+      'Error: ',
+      packet.errorMessage
+    );
+  }
 }
 
 /**

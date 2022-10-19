@@ -14,8 +14,7 @@
     "@google-cloud/local-auth": "^2.1.1",
     "commander": "^9.4.0",
     "edit-json-file": "^1.7.0",
-    "googleapis": "^107.0.0",
-    "node-ipc": "^11.1.0"
+    "googleapis": "^107.0.0"
   },
   "pkg": {
     "scripts": "./src/*.js",

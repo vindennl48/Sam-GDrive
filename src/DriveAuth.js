@@ -5,6 +5,7 @@ const process          = require('process');
 const { authenticate } = require('@google-cloud/local-auth');
 const { google }       = require('googleapis');
 const { Helpers }      = require('../../samcore/src/Helpers.js');
+const Packet           = Helpers.Packet;
 
 class Drive {
   constructor() {
@@ -58,9 +59,13 @@ class Drive {
         !('filepath' in instruction) ||
         !('id'       in instruction)
       ) {
-        return {
+        return Packet.newMini({
+          status:       false,
           errorMessage: `Missing variable in instruction #${i}`
-        };
+        });
+        // return {
+        //   errorMessage: `Missing variable in instruction #${i}`
+        // };
       }
 
       Helpers.log({leader: 'arrow', loud: false},
@@ -89,15 +94,20 @@ class Drive {
         }
       );
       if (!res) {
-        return {
+        return Packet.newMini({
+          status:       false,
           errorMessage: `Issue downloading instruction #${i}`
-        };
+        });
+        // return {
+        //   errorMessage: `Issue downloading instruction #${i}`
+        // };
       }
     }
 
     Helpers.log({leader: 'highlight', loud: false}, 'Downloads Complete!');
 
-    return { result: true };
+    return Packet.newMini({ status: true });
+    // return { result: true };
   }
 
   /**
@@ -143,9 +153,13 @@ class Drive {
       ) { isMissingVar = true; }
 
       if (isMissingVar) {
-        return {
+        return Packet.newMini({
+          status:       false,
           errorMessage: `Missing variable in instruction #${i}`
-        };
+        });
+        // return {
+        //   errorMessage: `Missing variable in instruction #${i}`
+        // };
       }
 
       let type = null;
@@ -154,9 +168,13 @@ class Drive {
       else if (instruction.type == 'stems')    { type = this.fileType.zip; }
       else if (instruction.type == 'db')       { type = this.fileType.json; }
       else {
-        return {
+        return Packet.newMini({
+          status:       false,
           errorMessage: `Invalid type in instruction #${i}`
-        };
+        });
+        // return {
+        //   errorMessage: `Invalid type in instruction #${i}`
+        // };
       }
 
       Helpers.log({leader: 'arrow', loud: false},
@@ -197,7 +215,8 @@ class Drive {
 
     Helpers.log({leader: 'highlight', loud: false}, 'Uploads Complete!');
 
-    return result;
+    return Packet.newMini({ result: result });
+    // return result;
   }
 
 
@@ -238,7 +257,8 @@ class Drive {
       result[name].stems    = await this._makeFolder(result[name].root, 'stems');
     }
 
-    return result;
+    return Packet.newMini({ result: result });
+    // return result;
   }
 
   /**
